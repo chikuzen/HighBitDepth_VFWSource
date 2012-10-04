@@ -25,6 +25,7 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
+#define HBVFW_VERSION "0.1.1"
 
 typedef union {
     DWORD fcc;
@@ -50,9 +51,9 @@ class HBVFWSource : public IClip {
     PAVISTREAM stream;
     AVIFILEINFO file_info;
     AVISTREAMINFO stream_info;
-    BITMAPINFOHEADER dst_format;
     BYTE *buff;
     LONG buff_size;
+    int shift;
 
 public:
     HBVFWSource(const char *source, IScriptEnvironment *env);
@@ -62,6 +63,7 @@ public:
     void __stdcall GetAudio(void *, __int64, __int64, IScriptEnvironment*) {}
     const VideoInfo& __stdcall GetVideoInfo() { return vi; }
     void __stdcall SetCacheHints(int cachehints,int frame_range) {}
+
 };
 
 
@@ -88,12 +90,13 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
      const struct {
         DWORD fourcc;
         int avs_pix_type;
+        int shift;
     } table[] = {
-        { MAKEFOURCC('P', '2', '1', '6'), VideoInfo::CS_YV16    },
-        { MAKEFOURCC('P', '2', '1', '0'), VideoInfo::CS_YV16    },
-        { MAKEFOURCC('P', '0', '1', '6'), VideoInfo::CS_I420    },
-        { MAKEFOURCC('P', '0', '1', '0'), VideoInfo::CS_I420    },
-        { stream_info.fccHandler,         VideoInfo::CS_UNKNOWN }
+        { MAKEFOURCC('P', '2', '1', '6'), VideoInfo::CS_YV16,    0 },
+        { MAKEFOURCC('P', '2', '1', '0'), VideoInfo::CS_YV16,    6 },
+        { MAKEFOURCC('P', '0', '1', '6'), VideoInfo::CS_I420,    0 },
+        { MAKEFOURCC('P', '0', '1', '0'), VideoInfo::CS_I420,    6 },
+        { stream_info.fccHandler,         VideoInfo::CS_UNKNOWN, 0 }
     };
 
     int i = 0;
@@ -105,6 +108,7 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
                         fcc.c.c0, fcc.c.c1, fcc.c.c2, fcc.c.c3);
     }
 
+    shift = table[i].shift;
     vi.pixel_type = table[i].avs_pix_type;
     vi.width = file_info.dwWidth << 1;
     vi.height = file_info.dwHeight;
@@ -146,6 +150,15 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
     env->BitBlt(dst->GetWritePtr(PLANAR_Y), dst->GetPitch(PLANAR_Y),
                 buff, vi.width, vi.width, vi.height);
 
+    int shift = this->shift;
+    if (shift) {
+        WORD* dstp_y = (WORD*)dst->GetWritePtr(PLANAR_Y);
+        int num = dst->GetPitch(PLANAR_Y) * vi.height >> 1;
+        for (int i = 0; i < num; i++) {
+            dstp_y[i] >>= shift;
+        }
+    }
+
     WORD* dstp_u = (WORD*)dst->GetWritePtr(PLANAR_U);
     WORD* dstp_v = (WORD*)dst->GetWritePtr(PLANAR_V);
     int pitch = dst->GetPitch(PLANAR_U) >> 1;
@@ -155,8 +168,8 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            dstp_u[x] = srcp_uv[x].u;
-            dstp_v[x] = srcp_uv[x].v;
+            dstp_u[x] = srcp_uv[x].u >> shift;
+            dstp_v[x] = srcp_uv[x].v >> shift;
         }
         srcp_uv += width >> 1;
         dstp_u += pitch;
@@ -181,5 +194,5 @@ extern "C" __declspec(dllexport) const char* __stdcall
 AvisynthPluginInit2(IScriptEnvironment* env)
 {
   env->AddFunction("HBVFWSource","[source]s", create_vfw_source, 0);
-  return "HBVFWSource for AviSynth2.6x";
+  return "HBVFWSource for AviSynth2.6x version" HBVFW_VERSION;
 }
