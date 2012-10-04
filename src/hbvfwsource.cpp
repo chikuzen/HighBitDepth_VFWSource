@@ -25,7 +25,7 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
-#define HBVFW_VERSION "0.1.1"
+#define HBVFW_VERSION "0.1.2"
 
 typedef union {
     DWORD fcc;
