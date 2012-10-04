@@ -25,7 +25,7 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
-#define HBVFW_VERSION "0.1.2"
+#define HBVFW_VERSION "0.1.3"
 
 typedef union {
     DWORD fcc;
@@ -79,14 +79,13 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
     if (AVIFileInfo(file, &file_info, sizeof(AVIFILEINFO)) != 0) {
         env->ThrowError("HBVFWSource: coudn't get file info");
     }
-
-    if (AVIFileGetStream(file, &stream, 0, 0) != 0 ) {
-        env->ThrowError("HBVFWSource: couldn't get stream");
+    if (AVIFileGetStream(file, &stream, streamtypeVIDEO, 0) != 0 ) {
+        env->ThrowError("HBVFWSource: couldn't get video stream");
     }
 
     AVIStreamInfo(stream, &stream_info, sizeof(AVISTREAMINFO));
 
-     const struct {
+    const struct {
         DWORD fourcc;
         int avs_pix_type;
         int shift;
@@ -152,7 +151,7 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
     WORD* dstp_v = (WORD*)dst->GetWritePtr(PLANAR_V);
     int pitch = dst->GetPitch(PLANAR_U) >> 1;
     uv_t* srcp_uv = (uv_t*)(buff + vi.width * vi.height);
-    int width = vi.width >> 1;
+    int width = dst->GetRowSize(PLANAR_U) >> 1;
     int height = dst->GetHeight(PLANAR_U);
 
     for (int y = 0; y < height; y++) {
@@ -160,7 +159,7 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
             dstp_u[x] = srcp_uv[x].u;
             dstp_v[x] = srcp_uv[x].v;
         }
-        srcp_uv += width >> 1;
+        srcp_uv += width;
         dstp_u += pitch;
         dstp_v += pitch;
     }
