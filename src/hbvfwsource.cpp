@@ -2,19 +2,19 @@
   HighBit-depth VFW Readerfor AviSynth2.6x
 
   Copyright (C) 2012 Oka Motofumi
- 
+
   Authors: Oka Motofumi (chikuzen.mo at gmail dot com)
- 
+
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; either version 2 of the License, or
   (at your option) any later version.
- 
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
- 
+
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02111, USA.
@@ -51,22 +51,22 @@ class HBVFWSource : public IClip {
     PAVISTREAM stream;
     AVIFILEINFO file_info;
     AVISTREAMINFO stream_info;
-    BYTE *buff;
+    BYTE* buff;
     LONG buff_size;
 
 public:
-    HBVFWSource(const char *source, IScriptEnvironment *env);
+    HBVFWSource(const char* source, IScriptEnvironment* env);
     virtual ~HBVFWSource();
-    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment *env);
+    PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
     bool __stdcall GetParity(int n) { return false; }
-    void __stdcall GetAudio(void *, __int64, __int64, IScriptEnvironment*) {}
+    void __stdcall GetAudio(void*, __int64, __int64, IScriptEnvironment*) {}
     const VideoInfo& __stdcall GetVideoInfo() { return vi; }
-    void __stdcall SetCacheHints(int cachehints,int frame_range) {}
+    void __stdcall SetCacheHints(int, int) {}
 
 };
 
 
-HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
+HBVFWSource::HBVFWSource(const char* source, IScriptEnvironment* env)
 {
     AVIFileInit();
 
@@ -79,6 +79,7 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
     if (AVIFileInfo(file, &file_info, sizeof(AVIFILEINFO)) != 0) {
         env->ThrowError("HBVFWSource: coudn't get file info");
     }
+
     if (AVIFileGetStream(file, &stream, streamtypeVIDEO, 0) != 0 ) {
         env->ThrowError("HBVFWSource: couldn't get video stream");
     }
@@ -88,7 +89,6 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
     const struct {
         DWORD fourcc;
         int avs_pix_type;
-        int shift;
     } table[] = {
         { MAKEFOURCC('P', '2', '1', '6'), VideoInfo::CS_YV16    },
         { MAKEFOURCC('P', '2', '1', '0'), VideoInfo::CS_YV16    },
@@ -115,7 +115,7 @@ HBVFWSource::HBVFWSource(const char *source, IScriptEnvironment *env)
     vi.SetFieldBased(false);
 
     AVIStreamRead(stream, 0, 1, NULL, 0, &buff_size, NULL);
-    buff = (BYTE *)malloc(buff_size);
+    buff = (BYTE*)malloc(buff_size);
     if (!buff) {
         env->ThrowError("HBVFWSource: out of memory");
     }
@@ -168,8 +168,8 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
 }
 
 
-AVSValue __cdecl create_vfw_source(AVSValue args, void* user_data,
-                                   IScriptEnvironment* env)
+AVSValue __cdecl
+create_vfw_source(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
     if (!args[0].Defined()) {
         env->ThrowError("HBVFWSource: No source specified");
@@ -181,6 +181,6 @@ AVSValue __cdecl create_vfw_source(AVSValue args, void* user_data,
 extern "C" __declspec(dllexport) const char* __stdcall
 AvisynthPluginInit2(IScriptEnvironment* env)
 {
-  env->AddFunction("HBVFWSource","[source]s", create_vfw_source, 0);
-  return "HBVFWSource for AviSynth2.6x version" HBVFW_VERSION;
+    env->AddFunction("HBVFWSource","[source]s", create_vfw_source, 0);
+    return "HBVFWSource for AviSynth2.6x version" HBVFW_VERSION;
 }
