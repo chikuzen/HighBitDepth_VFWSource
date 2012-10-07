@@ -8,7 +8,7 @@ Author Oka Motofumi (chikuzen.mo at gmail dot com)
 usage:
 
 HBVFWSource(string source, bool "stacked")
-source: source file pth
+source: source file path
 stacked: if this is set to true, MSB/LSB will be separated and be stacked vertially(default false).
 
 #sample.avs
