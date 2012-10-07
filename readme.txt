@@ -6,12 +6,16 @@ Author Oka Motofumi (chikuzen.mo at gmail dot com)
 
 
 usage:
+
+HBVFWSource(string source, bool "stacked")
+source: source file pth
+stacked: if this is set to true, MSB/LSB will be separated and be stacked vertially(default false).
+
 #sample.avs
 LoadPlugin("HBVFWSource.dll")
 LoadPlugin("flash3kyuu_deband.dll")
 HBVFWSource("YUV42XP16.vpy")
 f3kdb_dither(stacked=false, input_depth=16)
-
 
 
 note:
