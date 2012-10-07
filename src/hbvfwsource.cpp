@@ -27,35 +27,27 @@
 
 #define HBVFW_VERSION "0.2.0"
 
-typedef union {
-    DWORD fcc;
-    struct {
-        char c0;
-        char c1;
-        char c2;
-        char c3;
-    } c;
-} fcc_t;
-
-typedef struct {
+struct uv_t {
     WORD u;
     WORD v;
-} uv_t;
+};
 
-typedef struct {
+struct y16_t {
     BYTE lsb;
-    BYTE msb; 
-} y16_t;
+    BYTE msb;
+};
 
-typedef struct {
+struct uv16_t {
     BYTE lsb_u;
     BYTE msb_u;
     BYTE lsb_v;
     BYTE msb_v;
-} uv16_t;
+};
 
-static void
-write_interleaved_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi, IScriptEnvironment *env)
+
+static void __stdcall
+write_interleaved_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
+                        IScriptEnvironment *env)
 {
     env->BitBlt(dst->GetWritePtr(PLANAR_Y), dst->GetPitch(PLANAR_Y),
                 buff, vi.width, vi.width, vi.height);
@@ -78,8 +70,10 @@ write_interleaved_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi, IScriptEnvi
     }
 }
 
-static void
-write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi, IScriptEnvironment *env)
+
+static void __stdcall
+write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
+                    IScriptEnvironment *env)
 {
     int width = dst->GetRowSize(PLANAR_Y);
     int lines = dst->GetHeight(PLANAR_Y) >> 1;
@@ -130,7 +124,8 @@ class HBVFWSource : public IClip {
     AVISTREAMINFO stream_info;
     BYTE* buff;
     LONG buff_size;
-    void (*func_write_frame)(PVideoFrame&, BYTE*, VideoInfo&, IScriptEnvironment*);
+    void (__stdcall *func_write_frame)(PVideoFrame&, BYTE*, VideoInfo&,
+                                       IScriptEnvironment*);
 
 public:
     HBVFWSource(const char* source, bool stacked, IScriptEnvironment* env);
@@ -144,7 +139,8 @@ public:
 };
 
 
-HBVFWSource::HBVFWSource(const char* source, bool stacked, IScriptEnvironment* env)
+HBVFWSource::HBVFWSource(const char* source, bool stacked,
+                         IScriptEnvironment* env)
 {
     AVIFileInit();
 
@@ -178,10 +174,13 @@ HBVFWSource::HBVFWSource(const char* source, bool stacked, IScriptEnvironment* e
     int i = 0;
     while (table[i].fourcc != stream_info.fccHandler) i++;
     if (table[i].avs_pix_type == VideoInfo::CS_UNKNOWN) {
-        fcc_t fcc;
-        fcc.fcc = stream_info.fccHandler;
+        union {
+            DWORD fcc;
+            char c[4];
+        }; 
+        fcc = stream_info.fccHandler;
         env->ThrowError("HBVFWSource: unsupported format '%c%c%c%c'",
-                        fcc.c.c0, fcc.c.c1, fcc.c.c2, fcc.c.c3);
+                        c[3], c[2], c[1], c[0]);
     }
 
     AVIStreamRead(stream, 0, 1, NULL, 0, &buff_size, NULL);
