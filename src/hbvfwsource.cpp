@@ -25,7 +25,7 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
-#define HBVFW_VERSION "0.1.3"
+#define HBVFW_VERSION "0.2.0"
 
 typedef union {
     DWORD fcc;
@@ -37,11 +37,88 @@ typedef union {
     } c;
 } fcc_t;
 
-
 typedef struct {
     WORD u;
     WORD v;
 } uv_t;
+
+typedef struct {
+    BYTE lsb;
+    BYTE msb; 
+} y16_t;
+
+typedef struct {
+    BYTE lsb_u;
+    BYTE msb_u;
+    BYTE lsb_v;
+    BYTE msb_v;
+} uv16_t;
+
+static void
+write_interleaved_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi, IScriptEnvironment *env)
+{
+    env->BitBlt(dst->GetWritePtr(PLANAR_Y), dst->GetPitch(PLANAR_Y),
+                buff, vi.width, vi.width, vi.height);
+
+    WORD* dstp_u = (WORD*)dst->GetWritePtr(PLANAR_U);
+    WORD* dstp_v = (WORD*)dst->GetWritePtr(PLANAR_V);
+    int pitch = dst->GetPitch(PLANAR_U) >> 1;
+    uv_t* srcp_uv = (uv_t*)(buff + vi.width * vi.height);
+    int width = dst->GetRowSize(PLANAR_U) >> 1;
+    int height = dst->GetHeight(PLANAR_U);
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            dstp_u[x] = srcp_uv[x].u;
+            dstp_v[x] = srcp_uv[x].v;
+        }
+        srcp_uv += width;
+        dstp_u += pitch;
+        dstp_v += pitch;
+    }
+}
+
+static void
+write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi, IScriptEnvironment *env)
+{
+    int width = dst->GetRowSize(PLANAR_Y);
+    int lines = dst->GetHeight(PLANAR_Y) >> 1;
+    y16_t* srcp_y = (y16_t*)buff;
+    int dst_pitch = dst->GetPitch(PLANAR_Y);
+    BYTE* msb_y = dst->GetWritePtr(PLANAR_Y);
+    BYTE* lsb_y = msb_y + (dst_pitch * lines);
+    for (int y = 0; y < lines; y++) {
+        for (int x = 0; x < width; x++) {
+            msb_y[x] = srcp_y[x].msb;
+            lsb_y[x] = srcp_y[x].lsb;
+        }
+        srcp_y += width;
+        msb_y += dst_pitch;
+        lsb_y += dst_pitch;
+    }
+
+    width = dst->GetRowSize(PLANAR_U);
+    lines = dst->GetHeight(PLANAR_U) >> 1;
+    uv16_t* srcp_uv = (uv16_t*)(buff + vi.width * vi.height);
+    dst_pitch = dst->GetPitch(PLANAR_U);
+    BYTE* msb_u = dst->GetWritePtr(PLANAR_U);
+    BYTE* lsb_u = msb_u + dst_pitch * lines;
+    BYTE* msb_v = dst->GetWritePtr(PLANAR_V);
+    BYTE* lsb_v = msb_v + dst_pitch * lines;
+    for (int y = 0; y < lines; y++) {
+        for (int x = 0; x < width; x++) {
+            msb_u[x] = srcp_uv[x].msb_u;
+            lsb_u[x] = srcp_uv[x].lsb_u;
+            msb_v[x] = srcp_uv[x].msb_v;
+            lsb_v[x] = srcp_uv[x].lsb_v;
+        }
+        srcp_uv += width;
+        msb_u += dst_pitch;
+        lsb_u += dst_pitch;
+        msb_v += dst_pitch;
+        lsb_v += dst_pitch;
+    }
+}
 
 
 class HBVFWSource : public IClip {
@@ -53,9 +130,10 @@ class HBVFWSource : public IClip {
     AVISTREAMINFO stream_info;
     BYTE* buff;
     LONG buff_size;
+    void (*func_write_frame)(PVideoFrame&, BYTE*, VideoInfo&, IScriptEnvironment*);
 
 public:
-    HBVFWSource(const char* source, IScriptEnvironment* env);
+    HBVFWSource(const char* source, bool stacked, IScriptEnvironment* env);
     virtual ~HBVFWSource();
     PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
     bool __stdcall GetParity(int n) { return false; }
@@ -66,7 +144,7 @@ public:
 };
 
 
-HBVFWSource::HBVFWSource(const char* source, IScriptEnvironment* env)
+HBVFWSource::HBVFWSource(const char* source, bool stacked, IScriptEnvironment* env)
 {
     AVIFileInit();
 
@@ -106,19 +184,20 @@ HBVFWSource::HBVFWSource(const char* source, IScriptEnvironment* env)
                         fcc.c.c0, fcc.c.c1, fcc.c.c2, fcc.c.c3);
     }
 
-    vi.pixel_type = table[i].avs_pix_type;
-    vi.width = file_info.dwWidth << 1;
-    vi.height = file_info.dwHeight;
-    vi.fps_numerator = stream_info.dwRate;
-    vi.fps_denominator = stream_info.dwScale;
-    vi.num_frames = stream_info.dwLength;
-    vi.SetFieldBased(false);
-
     AVIStreamRead(stream, 0, 1, NULL, 0, &buff_size, NULL);
     buff = (BYTE*)malloc(buff_size);
     if (!buff) {
         env->ThrowError("HBVFWSource: out of memory");
     }
+
+    vi.pixel_type = table[i].avs_pix_type;
+    vi.width = file_info.dwWidth << (stacked ? 0 : 1);
+    vi.height = file_info.dwHeight << (stacked ? 1 : 0);
+    vi.fps_numerator = stream_info.dwRate;
+    vi.fps_denominator = stream_info.dwScale;
+    vi.num_frames = stream_info.dwLength;
+    vi.SetFieldBased(false);
+    func_write_frame = stacked ? write_stacked_frame : write_interleaved_frame;
 }
 
 
@@ -144,25 +223,7 @@ PVideoFrame __stdcall HBVFWSource::GetFrame(int n, IScriptEnvironment* env)
         return dst;
     }
 
-    env->BitBlt(dst->GetWritePtr(PLANAR_Y), dst->GetPitch(PLANAR_Y),
-                buff, vi.width, vi.width, vi.height);
-
-    WORD* dstp_u = (WORD*)dst->GetWritePtr(PLANAR_U);
-    WORD* dstp_v = (WORD*)dst->GetWritePtr(PLANAR_V);
-    int pitch = dst->GetPitch(PLANAR_U) >> 1;
-    uv_t* srcp_uv = (uv_t*)(buff + vi.width * vi.height);
-    int width = dst->GetRowSize(PLANAR_U) >> 1;
-    int height = dst->GetHeight(PLANAR_U);
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            dstp_u[x] = srcp_uv[x].u;
-            dstp_v[x] = srcp_uv[x].v;
-        }
-        srcp_uv += width;
-        dstp_u += pitch;
-        dstp_v += pitch;
-    }
+    func_write_frame(dst, buff, vi, env);
 
     return dst;
 }
@@ -174,13 +235,13 @@ create_vfw_source(AVSValue args, void* user_data, IScriptEnvironment* env)
     if (!args[0].Defined()) {
         env->ThrowError("HBVFWSource: No source specified");
     }
-    return new HBVFWSource(args[0].AsString(), env);
+    return new HBVFWSource(args[0].AsString(), args[1].AsBool(false), env);
 }
 
 
 extern "C" __declspec(dllexport) const char* __stdcall
 AvisynthPluginInit2(IScriptEnvironment* env)
 {
-    env->AddFunction("HBVFWSource","[source]s", create_vfw_source, 0);
+    env->AddFunction("HBVFWSource","[source]s[stacked]b", create_vfw_source, 0);
     return "HBVFWSource for AviSynth2.6x version" HBVFW_VERSION;
 }
