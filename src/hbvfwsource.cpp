@@ -27,28 +27,15 @@
 
 #define HBVFW_VERSION "0.2.0"
 
-struct uv_t {
-    WORD u;
-    WORD v;
-};
-
-struct y16_t {
-    BYTE lsb;
-    BYTE msb;
-};
-
-struct uv16_t {
-    BYTE lsb_u;
-    BYTE msb_u;
-    BYTE lsb_v;
-    BYTE msb_v;
-};
-
 
 static void __stdcall
 write_interleaved_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
                         IScriptEnvironment *env)
 {
+    struct uv_t {
+        WORD u; WORD v;
+    };
+
     env->BitBlt(dst->GetWritePtr(PLANAR_Y), dst->GetPitch(PLANAR_Y),
                 buff, vi.width, vi.width, vi.height);
 
@@ -75,42 +62,64 @@ static void __stdcall
 write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
                     IScriptEnvironment *env)
 {
-    int width = dst->GetRowSize(PLANAR_Y);
+
+    struct y16_t {
+        BYTE lsb0; BYTE msb0; BYTE lsb1; BYTE msb1;
+        BYTE lsb2; BYTE msb2; BYTE lsb3; BYTE msb3;
+    };
+
+    struct uv16_t {
+        BYTE lsb_u0; BYTE msb_u0; BYTE lsb_v0; BYTE msb_v0;
+        BYTE lsb_u1; BYTE msb_u1; BYTE lsb_v1; BYTE msb_v1;
+        BYTE lsb_u2; BYTE msb_u2; BYTE lsb_v2; BYTE msb_v2;
+        BYTE lsb_u3; BYTE msb_u3; BYTE lsb_v3; BYTE msb_v3;
+    };
+
+    BYTE* srcp = buff;
+    int src_pitch = vi.width * 2;
+
+    int width = (dst->GetRowSize(PLANAR_Y) + 3) >> 2;
     int lines = dst->GetHeight(PLANAR_Y) >> 1;
-    y16_t* srcp_y = (y16_t*)buff;
-    int dst_pitch = dst->GetPitch(PLANAR_Y);
-    BYTE* msb_y = dst->GetWritePtr(PLANAR_Y);
-    BYTE* lsb_y = msb_y + (dst_pitch * lines);
+    int dst_pitch = dst->GetPitch(PLANAR_Y) >> 2;
+    DWORD* msb_y = (DWORD*)dst->GetWritePtr(PLANAR_Y);
+    DWORD* lsb_y = msb_y + (dst_pitch * lines);
     for (int y = 0; y < lines; y++) {
+        y16_t* srcp_y = (y16_t*)(srcp + y * src_pitch);
         for (int x = 0; x < width; x++) {
-            msb_y[x] = srcp_y[x].msb;
-            lsb_y[x] = srcp_y[x].lsb;
+            msb_y[x] = ((DWORD)srcp_y[x].msb3 << 24) | ((DWORD)srcp_y[x].msb2 << 16)
+                     | ((DWORD)srcp_y[x].msb1 << 8) | ((DWORD)srcp_y[x].msb0);
+            lsb_y[x] = ((DWORD)srcp_y[x].lsb3 << 24) | ((DWORD)srcp_y[x].lsb2 << 16)
+                     | ((DWORD)srcp_y[x].lsb1 << 8) | ((DWORD)srcp_y[x].lsb0);
         }
-        srcp_y += width;
         msb_y += dst_pitch;
         lsb_y += dst_pitch;
     }
 
-    width = dst->GetRowSize(PLANAR_U);
+    srcp += vi.width * vi.height;
+
+    width = (dst->GetRowSize(PLANAR_U) + 3) >> 2;
     lines = dst->GetHeight(PLANAR_U) >> 1;
-    uv16_t* srcp_uv = (uv16_t*)(buff + vi.width * vi.height);
     dst_pitch = dst->GetPitch(PLANAR_U);
-    BYTE* msb_u = dst->GetWritePtr(PLANAR_U);
-    BYTE* lsb_u = msb_u + dst_pitch * lines;
-    BYTE* msb_v = dst->GetWritePtr(PLANAR_V);
-    BYTE* lsb_v = msb_v + dst_pitch * lines;
+    BYTE* msb_u_orig = dst->GetWritePtr(PLANAR_U);
+    BYTE* lsb_u_orig = msb_u_orig + dst_pitch * lines;
+    BYTE* msb_v_orig = dst->GetWritePtr(PLANAR_V);
+    BYTE* lsb_v_orig = msb_v_orig + dst_pitch * lines;
     for (int y = 0; y < lines; y++) {
+        uv16_t* srcp_uv = (uv16_t*)(srcp + y * src_pitch);
+        DWORD* msb_u = (DWORD*)(msb_u_orig + y * dst_pitch);
+        DWORD* lsb_u = (DWORD*)(lsb_u_orig + y * dst_pitch);
+        DWORD* msb_v = (DWORD*)(msb_v_orig + y * dst_pitch);
+        DWORD* lsb_v = (DWORD*)(lsb_v_orig + y * dst_pitch);
         for (int x = 0; x < width; x++) {
-            msb_u[x] = srcp_uv[x].msb_u;
-            lsb_u[x] = srcp_uv[x].lsb_u;
-            msb_v[x] = srcp_uv[x].msb_v;
-            lsb_v[x] = srcp_uv[x].lsb_v;
+            msb_u[x] = ((DWORD)srcp_uv[x].msb_u3 << 24) | ((DWORD)srcp_uv[x].msb_u2 << 16)
+                     | ((DWORD)srcp_uv[x].msb_u1 << 8) | ((DWORD)srcp_uv[x].msb_u0);
+            lsb_u[x] = ((DWORD)srcp_uv[x].lsb_u3 << 24) | ((DWORD)srcp_uv[x].lsb_u2 << 16)
+                     | ((DWORD)srcp_uv[x].lsb_u1 << 8) | ((DWORD)srcp_uv[x].lsb_u0);
+            msb_v[x] = ((DWORD)srcp_uv[x].msb_v3 << 24) | ((DWORD)srcp_uv[x].msb_v2 << 16)
+                     | ((DWORD)srcp_uv[x].msb_v1 << 8) | ((DWORD)srcp_uv[x].msb_v0);
+            lsb_v[x] = ((DWORD)srcp_uv[x].lsb_v3 << 24) | ((DWORD)srcp_uv[x].lsb_v2 << 16)
+                     | ((DWORD)srcp_uv[x].lsb_v1 << 8) | ((DWORD)srcp_uv[x].lsb_v0);
         }
-        srcp_uv += width;
-        msb_u += dst_pitch;
-        lsb_u += dst_pitch;
-        msb_v += dst_pitch;
-        lsb_v += dst_pitch;
     }
 }
 
@@ -184,7 +193,7 @@ HBVFWSource::HBVFWSource(const char* source, bool stacked,
     }
 
     AVIStreamRead(stream, 0, 1, NULL, 0, &buff_size, NULL);
-    buff = (BYTE*)malloc(buff_size);
+    buff = (BYTE*)malloc(buff_size + 32);
     if (!buff) {
         env->ThrowError("HBVFWSource: out of memory");
     }
