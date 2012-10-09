@@ -25,7 +25,13 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
-#define HBVFW_VERSION "0.2.0"
+#define HBVFW_VERSION "0.2.1"
+
+
+static inline DWORD to_dword(BYTE b0, BYTE b1, BYTE b2, BYTE b3)
+{
+    return ((DWORD)b0 << 24) | ((DWORD)b0 << 16) | ((DWORD)b0 << 8) | (DWORD)b0;
+}
 
 
 static void __stdcall
@@ -86,10 +92,10 @@ write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
     for (int y = 0; y < lines; y++) {
         y16_t* srcp_y = (y16_t*)(srcp + y * src_pitch);
         for (int x = 0; x < width; x++) {
-            msb_y[x] = ((DWORD)srcp_y[x].msb3 << 24) | ((DWORD)srcp_y[x].msb2 << 16)
-                     | ((DWORD)srcp_y[x].msb1 << 8) | ((DWORD)srcp_y[x].msb0);
-            lsb_y[x] = ((DWORD)srcp_y[x].lsb3 << 24) | ((DWORD)srcp_y[x].lsb2 << 16)
-                     | ((DWORD)srcp_y[x].lsb1 << 8) | ((DWORD)srcp_y[x].lsb0);
+            msb_y[x] = to_dword(srcp_y[x].msb3, srcp_y[x].msb2,
+                                srcp_y[x].msb1, srcp_y[x].msb0);
+            lsb_y[x] = to_dword(srcp_y[x].lsb3, srcp_y[x].lsb2,
+                                srcp_y[x].lsb1, srcp_y[x].lsb0);
         }
         msb_y += dst_pitch;
         lsb_y += dst_pitch;
@@ -111,14 +117,14 @@ write_stacked_frame(PVideoFrame& dst, BYTE* buff, VideoInfo& vi,
         DWORD* msb_v = (DWORD*)(msb_v_orig + y * dst_pitch);
         DWORD* lsb_v = (DWORD*)(lsb_v_orig + y * dst_pitch);
         for (int x = 0; x < width; x++) {
-            msb_u[x] = ((DWORD)srcp_uv[x].msb_u3 << 24) | ((DWORD)srcp_uv[x].msb_u2 << 16)
-                     | ((DWORD)srcp_uv[x].msb_u1 << 8) | ((DWORD)srcp_uv[x].msb_u0);
-            lsb_u[x] = ((DWORD)srcp_uv[x].lsb_u3 << 24) | ((DWORD)srcp_uv[x].lsb_u2 << 16)
-                     | ((DWORD)srcp_uv[x].lsb_u1 << 8) | ((DWORD)srcp_uv[x].lsb_u0);
-            msb_v[x] = ((DWORD)srcp_uv[x].msb_v3 << 24) | ((DWORD)srcp_uv[x].msb_v2 << 16)
-                     | ((DWORD)srcp_uv[x].msb_v1 << 8) | ((DWORD)srcp_uv[x].msb_v0);
-            lsb_v[x] = ((DWORD)srcp_uv[x].lsb_v3 << 24) | ((DWORD)srcp_uv[x].lsb_v2 << 16)
-                     | ((DWORD)srcp_uv[x].lsb_v1 << 8) | ((DWORD)srcp_uv[x].lsb_v0);
+            msb_u[x] = to_dword(srcp_uv[x].msb_u3, srcp_uv[x].msb_u2,
+                                srcp_uv[x].msb_u1, srcp_uv[x].msb_u0);
+            lsb_u[x] = to_dword(srcp_uv[x].lsb_u3, srcp_uv[x].lsb_u2,
+                                srcp_uv[x].lsb_u1, srcp_uv[x].lsb_u0);
+            msb_v[x] = to_dword(srcp_uv[x].msb_v3, srcp_uv[x].msb_v2,
+                                srcp_uv[x].msb_v1, srcp_uv[x].msb_v0);
+            lsb_v[x] = to_dword(srcp_uv[x].lsb_v3, srcp_uv[x].lsb_v2,
+                                srcp_uv[x].lsb_v1, srcp_uv[x].lsb_v0);
         }
     }
 }
