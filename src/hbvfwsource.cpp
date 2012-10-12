@@ -25,12 +25,12 @@
 #include <vfw.h>
 #include "avisynth26.h"
 
-#define HBVFW_VERSION "0.2.1"
+#define HBVFW_VERSION "0.2.2"
 
 
 static inline DWORD to_dword(BYTE b0, BYTE b1, BYTE b2, BYTE b3)
 {
-    return ((DWORD)b0 << 24) | ((DWORD)b0 << 16) | ((DWORD)b0 << 8) | (DWORD)b0;
+    return ((DWORD)b0 << 24) | ((DWORD)b1 << 16) | ((DWORD)b2 << 8) | (DWORD)b3;
 }
 
 
